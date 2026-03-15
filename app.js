@@ -20,9 +20,28 @@ app.get("/login", (req, res) => {
   res.render("login");
 });
 
-app.get("/profile", isLoggedIn, (req, res) => {
+app.get("/profile", isLoggedIn, async (req, res) => {
   console.log("user in req", req.user);
-  res.render("login");
+  const user = await userModel
+    .findOne({ email: req.user.email })
+    .populate("posts");
+  console.log("user", user);
+
+  res.render("profile", { user });
+});
+
+app.post("/post", isLoggedIn, async (req, res) => {
+  console.log("post route");
+  const user = await userModel.findOne({ email: req.user.email });
+  const post = await postModel.create({
+    user: user._id,
+    content: req.body.content,
+  });
+
+  user.posts.push(post._id);
+  await user.save();
+
+  res.redirect("/profile");
 });
 
 app.post("/register", async (req, res) => {
@@ -57,8 +76,12 @@ app.post("/login", async (req, res) => {
   if (!user) return res.status(500).send("something went wrong");
   bcrypt.compare(password, user.password, (err, result) => {
     if (result) {
+      const token = jwt.sign(
+        { email: user.email, userId: user._id },
+        "shhhhhh",
+      );
       res.cookie("token", token);
-      res.status(200).send("you are logged in ");
+      res.status(200).redirect("/profile");
     } else res.redirect("/login");
   });
 });
@@ -70,11 +93,11 @@ app.get("/logout", (req, res) => {
   res.clearCookie("token", { path: "/login" });
 
   // Send a response to the client
-  res.send("Cookie has been deleted successfully");
+  res.redirect("/login");
 });
 
 function isLoggedIn(req, res, next) {
-  if (req.cookies.token == null) return res.send("you need to logged in ");
+  if (req.cookies.token == null) return res.redirect("/login");
   else {
     const data = jwt.verify(req.cookies.token, "shhhhhh");
     req.user = data;
